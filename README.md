@@ -1,123 +1,110 @@
-# Gmail Auto-Classifier Bot
+# 📧 GmailSense: AI-Powered Smart Inbox Cleaner
 
-Sistem otomatis untuk mengklasifikasikan email Gmail menggunakan AI dari Openrouter API.
+**GmailSense** adalah bot cerdas berbasis Google Apps Script yang menggunakan **Google Gemini 2.5 Flash Lite** (via OpenRouter) untuk membersihkan dan mengorganisir inbox Gmail Anda secara otomatis. Tidak sekadar filter biasa, bot ini "membaca" konteks email untuk menentukan apakah itu penting, spam, atau newsletter.
 
-## 🚀 Fitur
+---
 
-- ✅ Klasifikasi otomatis email dengan AI (Openrouter)
-- ✅ Auto-labeling berdasarkan kategori (Newsletter, Marketplace, Penting, Biasa)
-- ✅ Deteksi marketplace Indonesia (Tokopedia, Shopee, Lazada, dll)
-- ✅ Auto-delete email OTP dan newsletter lama (ke Trash, bukan permanent)
-- ✅ Prioritas memproses email## 🧠 Cara Kerja Bot
+## 🚀 Fitur Utama
 
-Bot ini bekerja dengan prinsip **"Zero Inbox" & "Smart Cleanup"**:
+- **🧠 AI Processor**: Mengklasifikasikan email dengan akurasi tinggi (lebih pintar dari regex/filter biasa).
+- **🧹 Auto-Trash OTP**: Kode OTP/Verifikasi yang expired langsung dibuang ke Sampah.
+- **📰 Smart Newsletter**: Newsletter baru ditandai "Read" & Label. Newsletter tua (>7 hari) otomatis dibuang.
+- **⚡ Priority Alert**: Email penting (Security, Server Alert, Invoice) dibiarkan **UNREAD** & diberi label `Priority` agar Anda notice.
+- **🧼 Zero Inbox Philosophy**: Semua email yang diproses akan ditandai **READ** (kecuali Priority) dan diberi label, sehingga inbox tetap rapi.
 
-1. **Strict Labeling**: Tidak ada email yang terlewat tanpa label.
-2. **Auto-Read**: Email non-urgent otomatis ditandai **Read** agar inbox tidak penuh notifikasi.
-3. **Smart Trash**: OTP/Verifikasi basi dan Newsletter tua langsung dibuang.
+---
 
-### 🏷️ Kategori & Aksi Otomatis
+## 🛠️ Tools Tersedia
 
-| Kategori        | Definisi                                                              | Aksi Bot                                                | Label                                               |
-| :-------------- | :-------------------------------------------------------------------- | :------------------------------------------------------ | :-------------------------------------------------- |
-| **OTP_VERIFY**  | Kode OTP, Link verifikasi, Confirm account (yang punya expired time). | **🗑️ TRASH IMMEDIATELY**                                | `Bot-Processed`                                     |
-| **NEWSLETTER**  | Email marketing, promosi, rekomendasi produk.                         | **🗑️ TRASH** (jika > 7 hari)<br>**👀 READ** (jika baru) | `Newsletter`                                        |
-| **MARKETPLACE** | Transaksi belanja, resi, bukti bayar.                                 | **👀 READ**                                             | `Marketplace` + Sublabel (Invoice/Shipping/Receipt) |
-| **PRIORITY**    | Security alert, Tagihan/Invoice, Lowongan kerja, Server alert.        | **🔔 KEEP UNREAD**                                      | `Priority` + Sublabel (Security/Invoice/Work)       |
-| **GENERAL**     | Info umum, Welcome email, ToS update, Notifikasi sosmed.              | **👀 READ**                                             | `General`                                           |
+Di dalam script ini terdapat 3 fungsi utama yang bisa Anda jalankan:
 
-> **Catatan:** Semua email yang sudah diproses akan mendapat label induk `Bot-Processed`.
+### 1. `processEmails()` (The Sorter)
 
-## ⚙️ Logic Pembersihan (Detail)
+- **Fungsi**: Mengambil 100 email **terlama** (belum diproses), membaca isinya dengan AI, lalu memberi label & aksi sesuai kategori.
+- **Gunakan saat**: Ingin membersihkan tumpukan inbox.
+- **Saran**: Set trigger otomatis per jam.
 
-1. **Search**: Mencari email yang BELUM berlabel `Bot-Processed`.
-2. **Sort**: Memproses email **TERLAMA** lebih dulu (Oldest First).
-3. **AI Analysis**: Mengirim body email ke **Google Gemini Flash Lite** (via OpenRouter) dengan instruksi strict.
-4. **Action**:
-   - Jika **Security Alert** (Google/GitHub) -> Masuk `Priority/Security` (UNREAD).
-   - Jika **OTP/Verification** -> Masuk `TRASH` (karena biasanya sudah expired).
-   - Jika **Newsletter** -> Cek umur. Jika > 7 hari, buang. Jika baru, label & read.
-   - Jika **Biasa** -> Masuk `General` & Read.Jalankan function `setupApiKey()` dan ganti `YOUR_API_KEY_HERE` dengan API key Anda
+### 2. `purgeOldNewsletters()` (The Janitor)
 
-### 5. Deploy
+- **Fungsi**: Mencari semua email berlabel `Newsletter` yang umurnya > 7 hari, lalu membuangnya ke Trash.
+- **Keunggulan**: Sangat cepat (tanpa AI), hemat kuota.
+- **Gunakan saat**: Ingin bersih-bersih rutin mingguan.
 
-```bash
-clasp push
-```
+### 3. `showStats()` (The Monitor)
 
-## 📖 Cara Pakai
+- **Fungsi**: Menampilkan jumlah email di setiap label (`Processed`, `Newsletter`, `Priority`, dll) di console log.
 
-### Manual Run
+---
 
-1. Buka Apps Script: `clasp open`
-2. Pilih function `processEmails`
-3. Klik Run
-4. Authorize akses Gmail (pertama kali)
-5. Lihat log untuk hasil
+## 🏷️ Kategori & Aksi
 
-### Custom Menu (Optional)
+| Kategori        | Contoh Email                            | Label           | Aksi Bot                                  |
+| :-------------- | :-------------------------------------- | :-------------- | :---------------------------------------- |
+| **OTP_VERIFY**  | Kode OTP, Link Verifikasi, Magic Link   | `Bot-Processed` | **🗑️ TRASH** (Langsung)                   |
+| **NEWSLETTER**  | Promo, Buletin, Rekomendasi Produk      | `Newsletter`    | **� READ** (Baru) / **�️ TRASH** (>7 hari) |
+| **MARKETPLACE** | Tokopedia, Shopee, Steam Receipt        | `Marketplace`   | **👀 READ** + Sublabel                    |
+| **PRIORITY**    | Security Alert, Invoice Server, Tagihan | `Priority`      | **🔔 KEEP UNREAD** + Sublabel             |
+| **GENERAL**     | Welcome email, Info ToS, Sosmed         | `General`       | **👀 READ**                               |
 
-Uncomment function `onOpen()` di `Code.gs` untuk menambahkan menu di Gmail UI.
+---
 
-## ⚙️ Konfigurasi
+## ⚙️ Cara Install & Setup
 
-Edit `CONFIG` object di `src/Code.gs`:
+### Prasyarat
 
-```javascript
-const CONFIG = {
-  OPENROUTER_MODEL: "meta-llama/llama-3.1-8b-instruct:free", // Ganti model
-  BATCH_SIZE: 20, // Jumlah email per run
-  NEWSLETTER_AGE_DAYS: 7, // Threshold hapus newsletter
-  // ... dll
-};
-```
+- Akun Google (Gmail).
+- API Key dari [OpenRouter](https://openrouter.ai/) (Model: `google/gemini-2.5-flash-lite`).
+- Node.js & Clasp (untuk development lokal).
 
-## 📁 Struktur Folder
+### Langkah Setup
+
+1. **Clone Repo**:
+   ```bash
+   git clone https://github.com/arenoe-studio/gmailsense.git
+   cd gmailsense
+   ```
+2. **Push ke Apps Script**:
+   ```bash
+   clasp login
+   clasp create --type standalone --title "Gmail Smart Bot"
+   clasp push
+   ```
+3. **Setup API Key**:
+   - Buka project di browser: `clasp open`
+   - Pergi ke **Project Settings** (⚙️) -> **Script Properties**.
+   - Tambahkan Property: `OPENROUTER_KEY`, Value: `sk-or-xxxx...` (Key Anda).
+4. **Jalankan Bot**:
+   - Di editor, pilih fungsi `processEmails`.
+   - Klik **Run**.
+   - Berikan izin akses (Authorization) saat diminta.
+
+---
+
+## ⏱️ Otomatisasi (Trigger)
+
+Agar bot bekerja otomatis tanpa perlu ditungguin:
+
+1. Buka Apps Script (`clasp open`).
+2. Klik menu **Triggers** (ikon Jam).
+3. Buat Trigger baru:
+   - Function: `processEmails`
+   - Event Source: **Time-driven**
+   - Type: **Hourly** (Setiap jam).
+
+---
+
+## � Struktur Project
 
 ```
 GmailSense/
 ├── src/
-│   ├── Code.gs           # Main script
-│   └── appsscript.json   # Apps Script manifest
-├── .clasp.json           # Clasp configuration
-├── .claspignore          # Files to ignore
-├── .gitignore            # Git ignore
-├── gmail-classifier-context.md  # Project context
-└── README.md             # This file
+│   ├── Code.js           # Logika utama (Config, Tools, AI, Handlers)
+│   └── appsscript.json   # Manifest permissions
+├── .clasp.json          # Config Clasp
+├── .claspignore         # Ignore rules
+└── README.md            # Dokumentasi ini
 ```
 
-## 🔒 Security
+---
 
-- API key disimpan di Properties Service (tidak di code)
-- OAuth scopes minimal yang diperlukan
-- Email dihapus ke Trash (30 hari retention), bukan permanent delete
-
-## 📊 Monitoring
-
-Lihat statistik label:
-
-```javascript
-showStats(); // Di Apps Script console
-```
-
-## 🐛 Troubleshooting
-
-### Error: API key tidak ditemukan
-
-Jalankan `setupApiKey()` terlebih dahulu
-
-### Error: Rate limit
-
-Kurangi `BATCH_SIZE` atau tingkatkan `API_DELAY_MS`
-
-### Email tidak terklasifikasi
-
-Cek log untuk error detail, pastikan API key valid
-
-## 📝 License
-
-MIT License - Gunakan sesuka Anda!
-
-## 🙏 Credits
-
-Built with ❤️ using Google Apps Script & Openrouter AI
+**Happy Cleansing!** 🧹✨
