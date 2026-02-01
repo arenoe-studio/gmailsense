@@ -1,0 +1,26 @@
+# Clasp files
+.clasp.json
+
+# Apps Script generated files
+.clasprc.json
+
+# Node modules (jika ada)
+node_modules/
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Environment variables (jika ada)
+.env
+.env.local

@@ -1,0 +1,17 @@
+# Ignore files saat push ke Apps Script
+**/**
+!Code.gs
+!appsscript.json
+
+# Ignore documentation
+*.md
+README.md
+
+# Ignore git files
+.git/**
+.gitignore
+
+# Ignore node modules jika ada
+node_modules/**
+package.json
+package-lock.json
