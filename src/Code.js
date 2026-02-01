@@ -13,7 +13,7 @@ const CONFIG = {
   OPENROUTER_MODEL: "google/gemini-2.5-flash-lite", // Ganti sesuai kebutuhan
 
   // Processing Settings
-  BATCH_SIZE: 20, // Jumlah email per run
+  BATCH_SIZE: 100, // Jumlah email per run (Upgraded!)
   EMAIL_BODY_LIMIT: 500, // Diperbesar agar AI lebih paham konteks
   NEWSLETTER_AGE_DAYS: 7, // Hapus newsletter lebih dari X hari
   API_DELAY_MS: 500, // Delay antar API call (rate limiting)
@@ -504,7 +504,34 @@ function initializeLabels() {
   return labels;
 }
 
+// ============================================================================
+// MONITORING & STATS
+// ============================================================================
+
+/**
+ * Menampilkan statistik jumlah email per label
+ */
 function showStats() {
-  // Opsional statistics function
-  Logger.log("Statistik Label...");
+  var stats = {
+    processed: GmailApp.getUserLabelByName(CONFIG.PROCESSED_LABEL),
+    newsletter: GmailApp.getUserLabelByName(CONFIG.NEWSLETTER_LABEL),
+    marketplace: GmailApp.getUserLabelByName(CONFIG.MARKETPLACE_LABEL),
+    priority: GmailApp.getUserLabelByName(CONFIG.IMPORTANT_LABEL), // Priority
+    general: GmailApp.getUserLabelByName(CONFIG.GENERAL_LABEL)
+  };
+
+  Logger.log("===== STATISTIK LABEL =====");
+
+  for (var key in stats) {
+    if (stats[key]) {
+      var count = stats[key].getThreads().length;
+      Logger.log(key.toUpperCase() + ": " + count + " threads");
+    } else {
+      Logger.log(key.toUpperCase() + ": Label '" + key + "' belum ada");
+    }
+  }
+  
+  // Cek Trash count tidak bisa langsung via API
+  Logger.log("===========================");
+  Logger.log("Tip: Run processEmails() untuk memproses batch berikutnya.");
 }
