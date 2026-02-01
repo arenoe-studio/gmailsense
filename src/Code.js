@@ -59,17 +59,19 @@ const CONFIG = {
 };
 
 // ============================================================================
-// CORE LOGIC: PROCESSOR ENGINE
+// MAIN TOOLS (RUNABLE FUNCTIONS)
+// Urutan fungsi di bawah ini akan muncul di dropdown Apps Script
 // ============================================================================
 
 /**
- * Main Function: Memproses email secara batch
- * Dijalankan manual atau via trigger
+ * [TOOL 1] Main Processor
+ * Memproses email yang belum berlabel (Klasifikasi AI)
  */
 function processEmails() {
   logMessage("===== MULAI PROCESSING =====", "info");
   var startTime = new Date();
 
+  // Validasi Config dulu
   if (!validateConfig()) return;
 
   // 1. Inisialisasi Label & Config
@@ -86,17 +88,14 @@ function processEmails() {
   var query = "-label:" + CONFIG.PROCESSED_LABEL;
 
   // Search threads (default return newest first)
-  // Kita perlu memproses yang LAMA dulu, tapi GmailApp.search tidak punya sort order parameter
-  // Solusi: Ambil batch yang lebih besar, lalu reverse array
-  // NOTE: GmailApp limit 500 threads max per search
   var threads = GmailApp.search(query, 0, 50);
 
   if (threads.length === 0) {
-    logMessage("Tidak ada email untuk diproses.", "info");
+    logMessage("Tidak ada email baru untuk diproses.", "info");
     return;
   }
 
-  // REVERSE untuk memproses email terlama dulu (sesuai request user)
+  // REVERSE untuk memproses email terlama dulu
   threads.reverse();
 
   // Limit sesuai BATCH_SIZE config
@@ -123,33 +122,19 @@ function processEmails() {
       });
 
       if (alreadyProcessed) {
-        logMessage(
-          "[" +
-            (i + 1) +
-            "] Skip (sudah diproses): " +
-            thread.getFirstMessageSubject(),
-          "info",
-        );
         stats.skipped++;
         continue;
       }
 
-      // Ambil message pertama di thread
       var messages = thread.getMessages();
-      var message = messages[0]; // Message pertama = message paling awal (root cause)
-
+      var message = messages[0]; 
       var subject = message.getSubject();
       var from = message.getFrom();
       var date = message.getDate();
-      var body = message.getPlainBody().substring(0, CONFIG.EMAIL_BODY_LIMIT); // Limit body
+      var body = message.getPlainBody().substring(0, CONFIG.EMAIL_BODY_LIMIT);
 
       logMessage(
-        "\n[" +
-          (i + 1) +
-          "/" +
-          batchThreads.length +
-          "] Processing: " +
-          subject,
+        "\n[" + (i + 1) + "/" + batchThreads.length + "] Processing: " + subject,
         "info",
       );
 
@@ -163,11 +148,7 @@ function processEmails() {
       );
 
       logMessage(
-        "Result: " +
-          classification.category +
-          (classification.subcategory
-            ? " (" + classification.subcategory + ")"
-            : ""),
+        "Result: " + classification.category + (classification.subcategory ? " (" + classification.subcategory + ")" : ""),
         "success",
       );
       
@@ -175,13 +156,10 @@ function processEmails() {
       executeAction(thread, message, classification, labels);
 
       stats.success++;
-
-      // Anti rate-limit delay
       Utilities.sleep(CONFIG.API_DELAY_MS);
     } catch (error) {
       stats.error++;
       handleError(error, thread.getFirstMessageSubject());
-      // Lanjut ke email berikutnya (graceful failure)
     }
   }
 
@@ -190,10 +168,84 @@ function processEmails() {
   logMessage("\n===== SUMMARY =====", "info");
   logMessage("Total Processed: " + stats.success, "success");
   logMessage("Errors: " + stats.error, "error");
-  logMessage("Skipped: " + stats.skipped, "warning");
   logMessage("Duration: " + formatDuration(duration), "info");
   logMessage("===================", "info");
 }
+
+/**
+ * [TOOL 2] Newsletter Cleaner
+ * Membersihkan Newsletter yang sudah tua (> 7 hari).
+ * Tanpa AI, murni cek label dan tanggal. Cepat & Hemat.
+ */
+function purgeOldNewsletters() {
+  logMessage("===== MULAI PEMBERSIHAN NEWSLETTER =====", "info");
+  var startTime = new Date();
+  
+  // Cari email dengan label Newsletter yang lebih tua dari X hari
+  // Syntax search Gmail: label:Newsletter older_than:7d
+  var query = 'label:' + CONFIG.NEWSLETTER_LABEL + ' older_than:' + CONFIG.NEWSLETTER_AGE_DAYS + 'd';
+  
+  logMessage("Query: " + query, "info");
+  
+  // Ambil batch besar (misal 100 sekaligus karena prosesnya enteng)
+  var threads = GmailApp.search(query, 0, 100);
+  
+  if (threads.length === 0) {
+    logMessage("Tidak ada newsletter tua untuk dihapus.", "success");
+    return;
+  }
+  
+  logMessage("Ditemukan " + threads.length + " newsletter tua. Menghapus...", "warning");
+  
+  // GmailApp.moveThreadsToTrash lebih efisien daripada loop satu per satu
+  GmailApp.moveThreadsToTrash(threads);
+  
+  var duration = (new Date() - startTime) / 1000;
+  logMessage("✓ Berhasil menghapus " + threads.length + " newsletter.", "success");
+  logMessage("Duration: " + formatDuration(duration), "info");
+  logMessage("========================================", "info");
+}
+
+/**
+ * [TOOL 3] Show Stats
+ * Menampilkan statistik jumlah email per label
+ */
+function showStats() {
+  var stats = {
+    processed: GmailApp.getUserLabelByName(CONFIG.PROCESSED_LABEL),
+    newsletter: GmailApp.getUserLabelByName(CONFIG.NEWSLETTER_LABEL),
+    marketplace: GmailApp.getUserLabelByName(CONFIG.MARKETPLACE_LABEL),
+    priority: GmailApp.getUserLabelByName(CONFIG.IMPORTANT_LABEL),
+    general: GmailApp.getUserLabelByName(CONFIG.GENERAL_LABEL)
+  };
+
+  Logger.log("===== STATISTIK LABEL =====");
+
+  for (var key in stats) {
+    if (stats[key]) {
+      var count = stats[key].getThreads().length;
+      Logger.log(key.toUpperCase() + ": " + count + " threads");
+    } else {
+      Logger.log(key.toUpperCase() + ": Label '" + key + "' belum ada");
+    }
+  }
+  
+  Logger.log("===========================");
+}
+
+/**
+ * [TOOL 4] Setup API Key
+ * Jalankan sekali untuk setup
+ */
+function setupApiKey() {
+  var apiKey = "YOUR_API_KEY_HERE";
+  PropertiesService.getScriptProperties().setProperty("OPENROUTER_KEY", apiKey);
+  Logger.log("✓ API key berhasil disimpan!");
+}
+
+// ============================================================================
+// INTERNAL ENGINE (JANGAN DIJALANKAN MANUAL)
+// ============================================================================
 
 // ============================================================================
 // AI ENGINE: CLASSIFIER
