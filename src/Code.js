@@ -14,7 +14,7 @@ const CONFIG = {
 
   // Processing Settings
   BATCH_SIZE: 20, // Jumlah email per run
-  EMAIL_BODY_LIMIT: 300, // Karakter body yang diambil untuk AI
+  EMAIL_BODY_LIMIT: 500, // Diperbesar agar AI lebih paham konteks
   NEWSLETTER_AGE_DAYS: 7, // Hapus newsletter lebih dari X hari
   API_DELAY_MS: 500, // Delay antar API call (rate limiting)
 
@@ -22,7 +22,8 @@ const CONFIG = {
   PROCESSED_LABEL: 'Bot-Processed',
   NEWSLETTER_LABEL: 'Newsletter',
   MARKETPLACE_LABEL: 'Marketplace',
-  IMPORTANT_LABEL: 'Priority', // Ganti 'Penting' jadi 'Priority' biar aman
+  IMPORTANT_LABEL: 'Priority',
+  GENERAL_LABEL: 'General', // Label baru untuk kategori BIASA
   
   // Marketplace Detection Patterns (domain/sender keywords)
   MARKETPLACE_PATTERNS: [
@@ -34,7 +35,10 @@ const CONFIG = {
     'jd.id',
     'zalora',
     'sociolla',
-    'orami'
+    'orami',
+    'google play',
+    'apple',
+    'steam'
   ],
   
   // Subcategory Mapping
@@ -48,7 +52,9 @@ const CONFIG = {
     invoice: 'Priority/Invoice',
     booking: 'Priority/Booking',
     shipping: 'Priority/Shipping',
-    document: 'Priority/Document'
+    document: 'Priority/Document',
+    security: 'Priority/Security', // Security alert penting (Google/GitHub)
+    work: 'Priority/Work' // Notifikasi server/kerjaan (Render/Fly.io)
   }
 };
 
@@ -164,8 +170,7 @@ function processEmails() {
             : ""),
         "success",
       );
-      logMessage("Reason: " + classification.reason, "info");
-
+      
       // 5. Execute Action
       executeAction(thread, message, classification, labels);
 
@@ -200,39 +205,46 @@ function processEmails() {
 function classifyWithAI(subject, from, body, date) {
   var apiKey = getApiKey();
 
-  // System Prompt: Brain dari classifier ini
-  var systemPrompt = `Kamu adalah sistem klasifikasi email otomatis yang cerdas dan ketat.
-Tugasmu adalah menganalisis email dan mengkategorikannya ke dalam salah satu kategori berikut:
+  // System Prompt V2: Lebih Strict, Anti-Halu, & Support New Categories
+  var systemPrompt = `Kamu adalah sistem klasifikasi email otomatis yang sangat cerdas, detail, dan ketat.
+Tugas utama: Mengkategorikan email untuk manajemen inbox yang bersih ("Zero Inbox").
 
-1. **NEWSLETTER**
-   - Definisi: Email marketing, promosi sales, buletin berita, info produk baru.
-   - Kata kunci: "diskon", "promo", "penawaran", "newsletter", "unsubscribe".
+KATEGORI & ATURAN:
 
-2. **OTP** (Sangat Ketat!)
-   - Definisi: HANYA kode verifikasi sementara, kode OTP (6 digit), link aktivasi sekali pakai, akses login sementara.
-   - PENTING: Konfirmasi perubahan password, notifikasi login dari device baru, peringatan keamanan akun BUKAN OTP (masuk ke BIASA/PENTING).
-   - Kata kunci: "kode verifikasi", "kode OTP", "login code", "verification code".
+1. **OTP_VERIFY** (Strict Cleanup!)
+   - Definisi: HANYA email verifikasi yang punya BATAS WAKTU (expired).
+   - Termasuk: Kode OTP (6 digit), Link verifikasi ("Verify email", "Confirm account"), Magic Link login.
+   - PENTING: Jangan masukkan Security Alert di sini!
 
-3. **MARKETPLACE**
-   - Definisi: Email transaksional dari e-commerce (Tokopedia, Shopee, Lazada, Bukalapak, Tiket.com, Traveloka, dll).
-   - Jenis: Invoice pembelian, resi pengiriman, konfirmasi pembayaran.
+2. **NEWSLETTER** (Bersihkan!)
+   - Definisi: Email marketing, promosi, "You might like", "Weekly Digest", rekomendasi produk.
+   - Kata kunci: "Unsubscribe", "Promo", "Deal", "Diskon".
 
-4. **PENTING**
-   - Definisi: Dokumen penting, kontrak kerja, tagihan/invoice (NON-marketplace), tiket pesawat/hotel (direct booking), surat resmi instansi.
-   - Jika ragu, masukkan ke BIASA.
+3. **PRIORITY** (Jangan dihapus!)
+   - Definisi: Email yang MEMERLUKAN PERHATIAN USER atau ARSIP PENTING.
+   - Subkategori:
+     - "security": Security alert (Google/GitHub/FB), login alert, password changed.
+     - "invoice": Tagihan, invoice berbayar (provider server, internet, dll).
+     - "work": Notifikasi server (Render/Fly.io/AWS), error sistem, job application update.
+     - "document": Tiket pesawat, booking hotel, dokumen legal.
 
-5. **BIASA**
-   - Definisi: Email personal, percakapan tim, notifikasi sosial media, update sistem umum, notifikasi keamanan akun, konfirmasi ganti password.
+4. **MARKETPLACE**
+   - Definisi: Transaksi belanja online (Tokopedia, Shopee, Steam, Google Play Receipt).
+   - Subkategori: "receipt" (bukti bayar), "shipping" (pengiriman).
 
-OUTPUT FORMAT (Wajib JSON valid):
+5. **GENERAL** (Lain-lain)
+   - Definisi: Email informatif biasa yang TIDAK expired dan BUKAN promosi sampah.
+   - Termasuk: Welcome email (Onboarding), Notifikasi sosial media, Update Terms of Service (ToS), Informasi akun umum.
+
+OUTPUT FORMAT (JSON):
 {
-  "category": "NEWSLETTER|OTP|MARKETPLACE|PENTING|BIASA",
-  "subcategory": "invoice|shipping|receipt|booking|document|null",
+  "category": "OTP_VERIFY|NEWSLETTER|PRIORITY|MARKETPLACE|GENERAL",
+  "subcategory": "security|invoice|work|document|receipt|shipping|null",
   "confidence": 0.0-1.0,
-  "reason": "Penjelasan singkat max 10 kata"
+  "reason": "Penjelasan singkat kenapa masuk kategori ini"
 }`;
 
-  // User Prompt: Data email yang akan dianalisis
+  // User Prompt
   var userPrompt = `Subject: ${subject}
 From: ${from}
 Date: ${date}
@@ -240,7 +252,7 @@ Date: ${date}
 Body Preview:
 ${body}
 
-Klasifikasikan email ini!`;
+Klasifikasikan!`;
 
   var payload = {
     model: CONFIG.OPENROUTER_MODEL,
@@ -248,8 +260,8 @@ Klasifikasikan email ini!`;
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    temperature: 0.1, // Rendah agar konsisten
-    response_format: { type: "json_object" }, // Force JSON mode
+    temperature: 0.1, // Sangat strict
+    response_format: { type: "json_object" },
   };
 
   var options = {
@@ -278,14 +290,12 @@ Klasifikasikan email ini!`;
   var json = JSON.parse(responseText);
   var aiContent = json.choices[0].message.content;
 
-  // Parse JSON Result
   try {
     return JSON.parse(aiContent);
   } catch (e) {
     logMessage("Gagal parse JSON dari AI: " + aiContent, "error");
-    // Fallback
     return {
-      category: "BIASA",
+      category: "GENERAL",
       subcategory: null,
       confidence: 0.0,
       reason: "JSON Parse Error",
@@ -300,13 +310,13 @@ function executeAction(thread, message, classification, labels) {
   var category = classification.category;
   var subcategory = classification.subcategory;
 
-  // 1. Handle berdasarkan kategori
+  // Dispatch Action
   switch (category) {
     case "NEWSLETTER":
       handleNewsletter(thread, message, labels.newsletter);
       break;
 
-    case "OTP":
+    case "OTP_VERIFY": // Nama kategori baru
       handleOTP(thread);
       break;
 
@@ -314,20 +324,19 @@ function executeAction(thread, message, classification, labels) {
       handleMarketplace(thread, subcategory, labels.marketplace);
       break;
 
-    case "PENTING":
-      handleImportant(thread, subcategory, labels.important);
+    case "PRIORITY":
+      handlePriority(thread, subcategory, labels.important); // Use 'important' label variable (mapped to Priority)
       break;
 
-    case "BIASA":
-      // Tidak ada aksi khusus, biarkan di inbox tanpa label
-      logMessage("Kategori BIASA (no action)", "info");
+    case "GENERAL":
+      handleGeneral(thread, labels.general);
       break;
 
-    default:
-      logMessage("Kategori tidak dikenal: " + category, "warning");
+    default: // Fallback ke General jika AI halu kategori aneh
+      handleGeneral(thread, labels.general);
   }
 
-  // 2. Tandai sudah diproses (jika belum kehapus)
+  // Finalize: Tandai Bot-Processed
   try {
     thread.addLabel(labels.processed);
   } catch (e) {
@@ -339,15 +348,12 @@ function executeAction(thread, message, classification, labels) {
 // ACTION HANDLERS
 // ============================================================================
 
-/**
- * Handle Newsletter: Label + Hapus jika tua
- */
 function handleNewsletter(thread, message, label) {
-  // Labeling (Safe Check)
-  if (label) {
-    thread.addLabel(label);
-  }
+  if (label) thread.addLabel(label);
   
+  // Mark Read (Supaya inbox tidak tebal)
+  thread.markRead();
+
   // Cek umur
   var messageDate = message.getDate();
   var ageInDays = (new Date() - messageDate) / (1000 * 60 * 60 * 24);
@@ -356,170 +362,103 @@ function handleNewsletter(thread, message, label) {
     thread.moveToTrash();
     logMessage('Newsletter tua (' + ageInDays.toFixed(1) + ' hari) -> Trash', 'warning');
   } else {
-    logMessage('Newsletter baru -> Label only', 'info');
+    logMessage('Newsletter baru -> Label & Read', 'info');
   }
 }
 
-/**
- * Handle OTP: Langsung ke Trash
- */
 function handleOTP(thread) {
+  // Langsung hapus karena time-sensitive dan dianggap sudah expired/digunakan
   thread.moveToTrash();
-  logMessage('OTP detected -> Trash immediately', 'warning');
+  logMessage('OTP/Verify Link -> Trash immediately', 'warning');
 }
 
-/**
- * Handle Marketplace: Label + Sublabel
- */
 function handleMarketplace(thread, subcategory, mainLabel) {
-  if (mainLabel) {
-    thread.addLabel(mainLabel);
-  }
+  if (mainLabel) thread.addLabel(mainLabel);
+  
+  // Mark Read (Kecuali user ingin receipts tetap unread, tapi biasanya receipts cukup diarsip/read)
+  thread.markRead();
   
   if (subcategory && CONFIG.MARKETPLACE_SUBLABELS[subcategory]) {
     var subLabelName = CONFIG.MARKETPLACE_SUBLABELS[subcategory];
     var subLabel = getOrCreateLabel(subLabelName);
-    if (subLabel) {
-      thread.addLabel(subLabel);
-      logMessage('Marketplace: ' + subcategory, 'info');
-    }
-  } else {
-    logMessage('Marketplace (General)', 'info');
+    if (subLabel) thread.addLabel(subLabel);
   }
+  logMessage('Marketplace -> Label & Read', 'info');
 }
 
-/**
- * Handle Important: Label + Sublabel
- */
-function handleImportant(thread, subcategory, mainLabel) {
-  if (mainLabel) {
-    thread.addLabel(mainLabel);
-  } else {
-    logMessage('⚠ Main label Priority gagal dibuat, skip labeling.', 'warning');
-  }
+function handlePriority(thread, subcategory, mainLabel) {
+  if (mainLabel) thread.addLabel(mainLabel);
+  
+  // KEEP UNREAD! Ini penting.
+  thread.markUnread(); 
   
   if (subcategory && CONFIG.IMPORTANT_SUBLABELS[subcategory]) {
     var subLabelName = CONFIG.IMPORTANT_SUBLABELS[subcategory];
     var subLabel = getOrCreateLabel(subLabelName);
-    if (subLabel) {
-      thread.addLabel(subLabel);
-      logMessage('Penting: ' + subcategory, 'info');
-    }
-  } else {
-    logMessage('Penting (General)', 'info');
+    if (subLabel) thread.addLabel(subLabel);
   }
+  logMessage('Priority -> Label & Keep Unread', 'info');
+}
+
+function handleGeneral(thread, label) {
+  if (label) thread.addLabel(label);
+  
+  // Mark Read (Info umum tidak perlu menuhin notifikasi unread)
+  thread.markRead();
+  
+  logMessage('General -> Label & Read', 'info');
 }
 
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
-/**
- * Mendapatkan atau membuat label Gmail
- * @param {string} labelName - Nama label yang akan dibuat/diambil
- * @return {GmailLabel} Label object
- */
 function getOrCreateLabel(labelName) {
   try {
-    if (
-      !labelName ||
-      typeof labelName !== "string" ||
-      labelName.trim() === ""
-    ) {
-      logMessage("⚠ Skip label invalid (kosong/null)", "warning");
+    if (!labelName || typeof labelName !== "string" || labelName.trim() === "") {
       return null;
     }
-
     var label = GmailApp.getUserLabelByName(labelName);
-
     if (!label) {
       label = GmailApp.createLabel(labelName);
       logMessage("✓ Label baru dibuat: " + labelName, "success");
     }
-
     return label;
   } catch (error) {
-    logMessage(
-      '✗ Error membuat/mengambil label "' +
-        labelName +
-        '": ' +
-        error.toString(),
-      "error",
-    );
-    // Jangan throw error agar tidak mematikan seluruh proses, return null saja
+    logMessage('✗ Error membuat/mengambil label "' + labelName + '": ' + error.toString(), "error");
     return null;
   }
 }
 
-/**
- * Mendapatkan API key dari Properties Service
- * @return {string} API key
- */
 function getApiKey() {
-  var apiKey =
-    PropertiesService.getScriptProperties().getProperty("OPENROUTER_KEY");
-
-  if (!apiKey) {
-    throw new Error(
-      "API key tidak ditemukan! Jalankan setupApiKey() terlebih dahulu.",
-    );
-  }
-
+  var apiKey = PropertiesService.getScriptProperties().getProperty("OPENROUTER_KEY");
+  if (!apiKey) throw new Error("API key tidak ditemukan!");
   return apiKey;
 }
 
-/**
- * Setup API key (jalankan sekali saat pertama kali)
- */
 function setupApiKey() {
-  var apiKey = "YOUR_API_KEY_HERE"; // GANTI INI!
-
+  var apiKey = "YOUR_API_KEY_HERE";
   PropertiesService.getScriptProperties().setProperty("OPENROUTER_KEY", apiKey);
   Logger.log("✓ API key berhasil disimpan!");
-  Logger.log("Sekarang Anda bisa menjalankan processEmails()");
 }
 
-/**
- * Log dengan format yang rapi
- */
 function logMessage(message, type) {
   type = type || "info";
-
-  var prefix = {
-    info: "ℹ",
-    success: "✓",
-    error: "✗",
-    warning: "⚠",
-  };
-
+  var prefix = { info: "ℹ", success: "✓", error: "✗", warning: "⚠" };
   Logger.log((prefix[type] || "") + " " + message);
 }
 
-/**
- * Format durasi dalam detik ke format yang lebih readable
- */
 function formatDuration(seconds) {
-  if (seconds < 60) {
-    return seconds.toFixed(1) + "s";
-  } else {
-    var minutes = Math.floor(seconds / 60);
-    var remainingSeconds = Math.floor(seconds % 60);
-    return minutes + "m " + remainingSeconds + "s";
-  }
+  if (seconds < 60) return seconds.toFixed(1) + "s";
+  var minutes = Math.floor(seconds / 60);
+  var remainingSeconds = Math.floor(seconds % 60);
+  return minutes + "m " + remainingSeconds + "s";
 }
 
-/**
- * Validasi konfigurasi sebelum memproses
- */
 function validateConfig() {
   try {
     getApiKey();
-    if (!CONFIG.OPENROUTER_MODEL) {
-      throw new Error("Model Openrouter belum dikonfigurasi!");
-    }
-    if (CONFIG.BATCH_SIZE < 1 || CONFIG.BATCH_SIZE > 100) {
-      throw new Error("BATCH_SIZE harus antara 1-100");
-    }
+    if (!CONFIG.OPENROUTER_MODEL) throw new Error("Model Openrouter belum dikonfigurasi!");
     logMessage("Konfigurasi valid", "success");
     return true;
   } catch (error) {
@@ -528,13 +467,6 @@ function validateConfig() {
   }
 }
 
-// ============================================================================
-// ERROR HANDLING UTILITIES
-// ============================================================================
-
-/**
- * Handle error dengan logging detail
- */
 function handleError(error, context) {
   var errorMessage = "Error";
   if (context) errorMessage += " [" + context + "]";
@@ -543,78 +475,36 @@ function handleError(error, context) {
   logMessage(errorMessage, "error");
 }
 
-/**
- * Retry function dengan exponential backoff
- */
 function retryWithBackoff(fn, maxRetries, initialDelay) {
   maxRetries = maxRetries || 3;
   initialDelay = initialDelay || 1000;
-
   for (var i = 0; i < maxRetries; i++) {
     try {
       return fn();
     } catch (error) {
       if (i === maxRetries - 1) throw error;
       var delay = initialDelay * Math.pow(2, i);
-      logMessage(
-        "Retry " + (i + 1) + "/" + maxRetries + " setelah " + delay + "ms...",
-        "warning",
-      );
       Utilities.sleep(delay);
     }
   }
 }
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
-/**
- * Inisialisasi semua label yang diperlukan
- */
 function initializeLabels() {
   logMessage("Menginisialisasi labels...", "info");
-
   var labels = {
     processed: getOrCreateLabel(CONFIG.PROCESSED_LABEL),
     newsletter: getOrCreateLabel(CONFIG.NEWSLETTER_LABEL),
     marketplace: getOrCreateLabel(CONFIG.MARKETPLACE_LABEL),
     important: getOrCreateLabel(CONFIG.IMPORTANT_LABEL),
+    general: getOrCreateLabel(CONFIG.GENERAL_LABEL), // Label baru
   };
-
-  for (var key in CONFIG.MARKETPLACE_SUBLABELS) {
-    getOrCreateLabel(CONFIG.MARKETPLACE_SUBLABELS[key]);
-  }
-
-  for (var key in CONFIG.IMPORTANT_SUBLABELS) {
-    getOrCreateLabel(CONFIG.IMPORTANT_SUBLABELS[key]);
-  }
-
+  for (var key in CONFIG.MARKETPLACE_SUBLABELS) getOrCreateLabel(CONFIG.MARKETPLACE_SUBLABELS[key]);
+  for (var key in CONFIG.IMPORTANT_SUBLABELS) getOrCreateLabel(CONFIG.IMPORTANT_SUBLABELS[key]);
   logMessage("Semua labels siap", "success");
   return labels;
 }
 
-/**
- * Menampilkan statistik label (optional)
- */
 function showStats() {
-  var stats = {
-    processed: GmailApp.getUserLabelByName(CONFIG.PROCESSED_LABEL),
-    newsletter: GmailApp.getUserLabelByName(CONFIG.NEWSLETTER_LABEL),
-    marketplace: GmailApp.getUserLabelByName(CONFIG.MARKETPLACE_LABEL),
-    important: GmailApp.getUserLabelByName(CONFIG.IMPORTANT_LABEL),
-  };
-
-  Logger.log("===== STATISTIK LABEL =====");
-
-  for (var key in stats) {
-    if (stats[key]) {
-      var count = stats[key].getThreads().length;
-      Logger.log(key.toUpperCase() + ": " + count + " threads");
-    } else {
-      Logger.log(key.toUpperCase() + ": Label belum ada");
-    }
-  }
-
-  Logger.log("===========================");
+  // Opsional statistics function
+  Logger.log("Statistik Label...");
 }

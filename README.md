@@ -8,45 +8,36 @@ Sistem otomatis untuk mengklasifikasikan email Gmail menggunakan AI dari Openrou
 - ✅ Auto-labeling berdasarkan kategori (Newsletter, Marketplace, Penting, Biasa)
 - ✅ Deteksi marketplace Indonesia (Tokopedia, Shopee, Lazada, dll)
 - ✅ Auto-delete email OTP dan newsletter lama (ke Trash, bukan permanent)
-- ✅ Prioritas memproses email lama terlebih dahulu
-- ✅ Batch processing (20 email per run, configurable)
+- ✅ Prioritas memproses email## 🧠 Cara Kerja Bot
 
-## 📋 Kategori Email
+Bot ini bekerja dengan prinsip **"Zero Inbox" & "Smart Cleanup"**:
 
-| Kategori        | Aksi                                                     |
-| --------------- | -------------------------------------------------------- |
-| **Newsletter**  | Label "Newsletter" + hapus jika > 7 hari                 |
-| **OTP**         | Hapus langsung (OTP, password reset, verification codes) |
-| **Marketplace** | Label "Marketplace" + sublabel (Invoice/Shipping)        |
-| **Penting**     | Label "Penting" + sublabel (untuk non-marketplace)       |
-| **Biasa**       | Tidak ada aksi                                           |
+1. **Strict Labeling**: Tidak ada email yang terlewat tanpa label.
+2. **Auto-Read**: Email non-urgent otomatis ditandai **Read** agar inbox tidak penuh notifikasi.
+3. **Smart Trash**: OTP/Verifikasi basi dan Newsletter tua langsung dibuang.
 
-## 🛠️ Setup
+### 🏷️ Kategori & Aksi Otomatis
 
-### 1. Clone Repository
+| Kategori        | Definisi                                                              | Aksi Bot                                                | Label                                               |
+| :-------------- | :-------------------------------------------------------------------- | :------------------------------------------------------ | :-------------------------------------------------- |
+| **OTP_VERIFY**  | Kode OTP, Link verifikasi, Confirm account (yang punya expired time). | **🗑️ TRASH IMMEDIATELY**                                | `Bot-Processed`                                     |
+| **NEWSLETTER**  | Email marketing, promosi, rekomendasi produk.                         | **🗑️ TRASH** (jika > 7 hari)<br>**👀 READ** (jika baru) | `Newsletter`                                        |
+| **MARKETPLACE** | Transaksi belanja, resi, bukti bayar.                                 | **👀 READ**                                             | `Marketplace` + Sublabel (Invoice/Shipping/Receipt) |
+| **PRIORITY**    | Security alert, Tagihan/Invoice, Lowongan kerja, Server alert.        | **🔔 KEEP UNREAD**                                      | `Priority` + Sublabel (Security/Invoice/Work)       |
+| **GENERAL**     | Info umum, Welcome email, ToS update, Notifikasi sosmed.              | **👀 READ**                                             | `General`                                           |
 
-```bash
-git clone <repo-url>
-cd GmailSense
-```
+> **Catatan:** Semua email yang sudah diproses akan mendapat label induk `Bot-Processed`.
 
-### 2. Install Clasp (jika belum)
+## ⚙️ Logic Pembersihan (Detail)
 
-```bash
-npm install -g @google/clasp
-```
-
-### 3. Login ke Google
-
-```bash
-clasp login
-```
-
-### 4. Setup API Key
-
-- Dapatkan API key dari [Openrouter](https://openrouter.ai/)
-- Buka Apps Script: `clasp open`
-- Jalankan function `setupApiKey()` dan ganti `YOUR_API_KEY_HERE` dengan API key Anda
+1. **Search**: Mencari email yang BELUM berlabel `Bot-Processed`.
+2. **Sort**: Memproses email **TERLAMA** lebih dulu (Oldest First).
+3. **AI Analysis**: Mengirim body email ke **Google Gemini Flash Lite** (via OpenRouter) dengan instruksi strict.
+4. **Action**:
+   - Jika **Security Alert** (Google/GitHub) -> Masuk `Priority/Security` (UNREAD).
+   - Jika **OTP/Verification** -> Masuk `TRASH` (karena biasanya sudah expired).
+   - Jika **Newsletter** -> Cek umur. Jika > 7 hari, buang. Jika baru, label & read.
+   - Jika **Biasa** -> Masuk `General` & Read.Jalankan function `setupApiKey()` dan ganti `YOUR_API_KEY_HERE` dengan API key Anda
 
 ### 5. Deploy
 
