@@ -10,7 +10,7 @@
 const CONFIG = {
   // API Settings
   OPENROUTER_API_URL: "https://openrouter.ai/api/v1/chat/completions",
-  OPENROUTER_MODEL: "meta-llama/llama-3.1-8b-instruct:free", // Ganti sesuai kebutuhan
+  OPENROUTER_MODEL: "google/gemini-2.5-flash-lite", // Ganti sesuai kebutuhan
 
   // Processing Settings
   BATCH_SIZE: 20, // Jumlah email per run
