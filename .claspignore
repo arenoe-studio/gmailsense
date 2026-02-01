@@ -1,6 +1,6 @@
 # Ignore files saat push ke Apps Script
 **/**
-!Code.gs
+!Code.js
 !appsscript.json
 
 # Ignore documentation
